@@ -9,3 +9,5 @@ use App\Http\Controllers\UsersController;
 
 Route::post('/login',[UsersController::class,'Login']);
 Route::post('/register',[UsersController::class,'register']);
+Route::put('/update',[UsersController::class,'update']);
+Route::get('prestataire',[UsersController::class,'prestataire']);

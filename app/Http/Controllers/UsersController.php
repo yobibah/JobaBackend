@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
+
 class UsersController extends Controller
 {
     public function login(Request $request)
@@ -17,13 +18,13 @@ class UsersController extends Controller
             "token" => "nullable|string"
         ]);
 
-        // 🔐 Auth via token
+        
         if ($request->filled('token')) {
-            $user = User::where("remember_token", $request->token)->first();
-
+            $user = User::where("remember_token", $request->token)
+            ->where("status",'=',0)
+            ->first();
             if ($user) {
                 $token = Str::random(60) . ',' . $user->id;
-
                 $user->update([
                     'remember_token' => $token
                 ]);
@@ -41,7 +42,7 @@ class UsersController extends Controller
             ], 401);
         }
 
-        // 🔐 Auth via email/password
+ 
         $user = User::where('email', $request->email)->first();
 
         if ($user && Hash::check($request->password, $user->password)) {
@@ -74,7 +75,7 @@ class UsersController extends Controller
         ]);
 
         $user = User::create([
-            'name' => $request->prenom . ' ' . $request->nom,
+            
             'nom' => $request->nom,
             'prenom' => $request->prenom,
             'email' => $request->email,
@@ -83,9 +84,8 @@ class UsersController extends Controller
             'adresse' => 'karpala',
             'longitude' => 12.234,
             'latitude' => -1.2345,
-            'autre' => 'autre',
             'numero' => '09876543',
-            'profile' => '34567qwedc.png',
+            'status'=>1 
         ]);
 
         $token = Str::random(60) . ',' . $user->id;
@@ -100,4 +100,53 @@ class UsersController extends Controller
             'user' => $user,
         ], 201);
     }
+
+    public function update(Request $request)
+{
+    $request->validate([
+        'token' => 'required',
+        'nom' => 'required',
+        'prenom' => 'required',
+        'profession' => 'required',
+        'descriptions' => 'required',
+    ]);
+
+    $user = User::where('remember_token', $request->token)->first();
+
+    if (!$user) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Utilisateur non trouvé'
+        ], 404);
+    }
+
+    $user->update([
+        'prenom' => $request->prenom,
+        'nom' => $request->nom,
+        'profession' => $request->profession,
+        'descriptions' => $request->descriptions,
+    ]);
+
+ 
+    $newToken = Str::random(60) . ',' . $user->id;
+    $user->remember_token = $newToken;
+    $user->save();
+
+    return response()->json([
+        'status' => 'success',
+        'token' => $newToken,
+        'user' => $user
+    ], 200);
+}
+
+public function prestataire() {
+    
+    $users = User::where('typeCompte', 'prestataire')->get();
+
+    return response()->json([
+        'message' => 'success',
+        'users' => $users
+    ], 200);
+}
+
 }
