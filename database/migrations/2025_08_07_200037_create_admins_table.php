@@ -11,8 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->boolean('status')->default(true);
+        Schema::create('admins', function (Blueprint $table) {
+            $table->id();
+            $table->timestamps();
+            $table->string('email')->unique();
+            $table->string('password');
+            $table->enum('role',['super_admins','admins']);
         });
     }
 
@@ -21,8 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            //
-        });
+        Schema::dropIfExists('admins');
     }
 };

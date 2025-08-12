@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 
 class User extends Authenticatable
 {
@@ -18,6 +19,7 @@ class User extends Authenticatable
      * @var list<string>
      */
       protected $fillable = [
+        'name',
         'prenom',
         'nom',
         'email',
@@ -42,7 +44,17 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'profile'
     ];
+
+
+    protected $appends = ['profile'];
+
+    public function getImageUrlAttribute()
+    {
+        return Storage::url($this->profile);
+
+    }
 
     /**
      * Get the attributes that should be cast.

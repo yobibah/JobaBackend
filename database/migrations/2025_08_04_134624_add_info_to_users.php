@@ -10,29 +10,28 @@ return new class extends Migration
      * Run the migrations.
      */
     public function up(): void
-    {
-        Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
-            $table->string('email')->unique();
-            $table->string('password');
-            $table->rememberToken();
-            $table->string('nom')->nullable();
+    { Schema::table('users', function (Blueprint $table) {
             $table->string('prenom')->nullable();
+            $table->string('nom')->nullable();
             $table->string('typeCompte')->nullable();
-            $table->string('profession')->nullable();
-            $table->string( 'numero')->nullable();
+            $table->string('adresse')->nullable();
             $table->string('longitude')->nullable();
             $table->string('latitude')->nullable();
-            $table->string('adresse')->nullable();
+            $table->string('numero')->nullable();
+            $table->text('descriptions')->nullable();
+            $table->string('profile')->nullable();
+            $table->boolean('status')->default(1);
+            $table->boolean('boosted')->default(false);
         });
-    }
 
+    }
     /**
      * Reverse the migrations.
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
+        Schema::table('users', function (Blueprint $table) {
+            //
+        });
     }
 };

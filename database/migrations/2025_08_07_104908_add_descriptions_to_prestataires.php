@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->boolean('boosted')->default(false);
+        Schema::table('prestataires', function (Blueprint $table) {
+            $table->text('prestataires')->nullable();
         });
     }
 
@@ -21,7 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('users', function (Blueprint $table) {
+        Schema::table('prestataires', function (Blueprint $table) {
             //
         });
     }

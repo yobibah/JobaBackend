@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Prestataire;
+use App\Models\rating;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 
@@ -75,11 +78,11 @@ class UsersController extends Controller
         ]);
 
         $user = User::create([
-            
+            'name'=> $request->nom,
             'nom' => $request->nom,
             'prenom' => $request->prenom,
             'email' => $request->email,
-            'password' => bcrypt($request->password),
+            'password' => hash::make($request->password),
             'typeCompte' => 'client',
             'adresse' => 'karpala',
             'longitude' => 12.234,
@@ -141,7 +144,8 @@ class UsersController extends Controller
 
 public function prestataire() {
     
-    $users = User::where('typeCompte', 'prestataire')->get();
+    $users = User::where('typeCompte', 'prestataire')
+    ->get();
 
     return response()->json([
         'message' => 'success',
@@ -149,4 +153,139 @@ public function prestataire() {
     ], 200);
 }
 
+public function detail (Request $request){
+    $request->validate([
+        'id'=>'required'
+    ]);
+    $user = User::find($request->id);
+    if (!$user) {
+        return response()->json([
+            'message'=>"une erreur est survenue lors du chargement..."
+            ], 404);
+
+    }
+    return response()->json([
+        'user'=>$user,
+        
+    ],200);
 }
+   
+public function nextSignup(Request $request)
+{
+    $request->validate([
+        'token' => 'required',
+        'adresse' => 'nullable|string',
+        'longitude' => 'nullable|string',
+        'latitude' => 'nullable|string',
+        'profile' => 'nullable', 
+        'type'=> 'nullable|string',                      
+        'metier'=>'nullable|string',
+        'numero'=>'required|string',                     
+        'autre'=>'nullable|string'
+    ]);
+
+    
+
+    $user = User::where('remember_token', $request->token)->first();
+   
+ 
+
+    if ($user) {
+        $pathname = null;
+
+        if ($request->hasFile('profile')) {
+            // stocke l'image dans storage/app/public/profiles
+            $path = $request->file('profile')->store('profiles', 'public');
+            $pathname = basename($path);
+        }
+        // enregistrer les donnees si cest un prestataires
+           if($request->type === 'prestataire'){
+        Prestataire::create([
+                'email'=> $user->email,
+                'nom'=>$user->nom,
+                'prenom'=>$user->prenom,
+                'profession'=>$request->autre ?? $request->metier,
+                'adresse'=>$request->adresse,
+                'numero'=>$request->numero,
+                'longitude'=>$request->longitude,
+                'latitude'=>$request->latitude,
+                'token'=>$request->token,
+                'boosted'=>false,
+                'whatsapp'=>$request->numero
+              
+        ]);
+              
+    }
+
+        $user->adresse = $request->adresse;
+        $user->longitude = $request->longitude;
+        $user->latitude = $request->latitude;
+        $user->typeCompte = $request->type;
+   
+        $user->descriptions =' cc';
+        $user->numero = 'cc';
+
+        if ($pathname) {
+            $user->profile = $pathname;
+        }
+
+        $user->save();
+
+        return response()->json([
+            'message' => 'Profil modifié avec succès'
+        ], 200);
+    }
+
+    return response()->json([
+        'message' => 'Une erreur est survenue lors de la mise à jour'
+    ], 404);
+}
+
+public function rating(Request $request){
+    $validator = Validator::make($request->all(), [
+        'prestatire_id'=> 'required',
+        'users_id'=>'required',
+        'note'=> 'required|integer|min:1,max:5',
+    ]);
+    if ($validator->fails()) {
+        return response()->json([
+            'message'=> $validator->errors()->first(),
+            ],500);
+        }
+
+    $user=User::where('remember_token',$request->users_id)->first();
+    if(!$user){
+        return response()->json([
+            'message'=> 'utilisateur non trouver'
+            ],404);
+    }
+
+    
+    $not=rating::where('prestataires_id', $request->prestatire_id)
+    ->where('users_id',$user->id);
+    
+
+    if($not){
+        return response()->json([
+            'message'=> 'vous avez deja noter cet prestataire.'
+            ],status: 500);
+    }
+
+     $rating = rating::create([
+        'prestataires_id'=> $request->prestatire_id,
+        'users_id'=> $user->id,
+        'notes'=> $request->note,
+     ]);
+     if($rating){
+        return response()->json([
+            'message'=> 'vous avez note'
+            ],200);
+     }
+     return response()->json([
+        'message'=> 'une erreur est survenue'
+        ],500);
+
+}
+
+}
+   
