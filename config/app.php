@@ -1,5 +1,8 @@
 <?php
 
+use App\Providers\AppServiceProvider;
+use App\Providers\EventServiceProvider;
+
 return [
 
     /*
@@ -104,6 +107,7 @@ return [
             explode(',', (string) env('APP_PREVIOUS_KEYS', ''))
         ),
     ],
+
 
     /*
     |--------------------------------------------------------------------------

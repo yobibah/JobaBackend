@@ -26,12 +26,12 @@ class Prestataire extends Model
         'whatsapp'
     ];
 
-    protected $hidden = ['profile'];
-    protected $appends = ['profile'];
+    // protected $hidden = ['profile'];
+    // protected $appends = ['profile_url'];
 
-    public function getImageUrlAttribute()
-    {
-        return Storage::url($this->profile);
-    }
+    // public function getProfileUrlAttribute()
+    // {
+    //     return Storage::url($this->profile);
+    // }
 }
          

@@ -27,6 +27,6 @@ class InscriptionMail extends Mailable
     public function build()
     {
         return $this->subject("Bienvenue sur JobaBackend !")
-                    ->view('emails.inscription'); // Vue HTML/Blade
+                    ->view('emails.inscription'); 
     }
 }

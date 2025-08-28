@@ -15,6 +15,17 @@ Route::post('/noting',[UsersController::class,'rating']);
 
 Route::post('/prestataire',[PrestataireController::class,'prestataire']);
 Route::post('/detail',[PrestataireController::class,'detail']);
+Route::get('/prestataire-vedette',[PrestataireController::class,'prestataireVedette']);
 
 //prestataire
 Route::post('loginp',[PrestataireController::class,'login']);
+
+
+// Route pour récupérer les notifications non lues
+Route::post('/notifi', [PrestataireController::class, 'notifi']);
+
+// Route pour marquer toutes les notifications comme lues
+Route::post('/readNotif', [PrestataireController::class, 'readNotif']);
+Route::post('/notifinotread', [PrestataireController::class, 'NotifNonLu']);
+
+Broadcast::routes(['middleware' => ['auth:api']]);
