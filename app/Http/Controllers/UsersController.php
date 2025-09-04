@@ -8,9 +8,11 @@ use App\Models\Prestataire;
 use App\Models\Rating;
 use App\Models\User;
 use App\Notifications\InscriptionsNotifications;
+use App\Notifications\PrestataireRatedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -73,6 +75,37 @@ class UsersController extends Controller
         ], 401);
     }
 
+
+
+public function Prestalogin(Request $request)
+{
+    $request->validate([
+        "email" => "required|email",
+        "password" => "required|string",
+    ]);
+
+    // Vérifier l'utilisateur par email
+    $user = Prestataire::where('email', $request->email)->first();
+
+    if (!$user || !Hash::check($request->password, $user->password)) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Email ou mot de passe incorrect'
+        ], 401);
+    }
+
+    // Supprimer les anciens tokens si nécessaire
+    $user->tokens()->delete();
+
+    // Créer un nouveau token sanctum
+    $token = $user->createToken('auth_token')->plainTextToken;
+
+    return response()->json([
+        'status' => 'success',
+        'token' => $token,
+        'user' => $user
+    ], 200);
+}
     public function register(Request $request)
     {
         $request->validate([
@@ -88,12 +121,12 @@ class UsersController extends Controller
             'prenom' => $request->prenom,
             'email' => $request->email,
             'password' => hash::make($request->password),
-            'typeCompte' => 'client',
-            'adresse' => 'karpala',
-            'longitude' => 12.234,
-            'latitude' => -1.2345,
-            'numero' => '09876543',
-            'status' => 1
+            'typeCompte' => '',
+            'adresse' => '',
+            'longitude' => '',
+            'latitude' => '',
+            'numero' => '',
+            'status' => ''
         ]);
         // $user->notify(new InscriptionsNotifications());
             // Mail::to($user->email)->send(new InscriptionMail($user));
@@ -183,7 +216,7 @@ class UsersController extends Controller
 public function nextSignup(Request $request)
     {
         // Validation
-        $request->validate([
+        $validator = Validator::make($request->all(),[
             'token' => 'required|string',
             'adresse' => 'nullable|string',
             'longitude' => 'nullable|string',
@@ -195,6 +228,9 @@ public function nextSignup(Request $request)
             'autre' => 'nullable|string',
         ]);
 
+        if($validator->fails()){
+            Log::info($validator->errors()->all());
+        }
         // Récupérer l'utilisateur via le token
         $user = User::where('remember_token', $request->token)->first();
 
@@ -214,15 +250,17 @@ public function nextSignup(Request $request)
         }
 
         // Gérer l'image de profil
-        $pathname = null;
+        $pathname = 'lolo';
         if ($request->hasFile('profile')) {
             $path = $request->file('profile')->store('profiles', 'public');
             $pathname = basename($path);
         }
 
+
+        $typecomp='prestataire';
         // Créer le prestataire si nécessaire
         if ($request->type === 'prestataire') {
-            Prestataire::create([
+           $prestataire= Prestataire::create([
                 'email' => $user->email,
                 'nom' => $user->nom,
                 'prenom' => $user->prenom,
@@ -235,23 +273,35 @@ public function nextSignup(Request $request)
                 'boosted' => false,
                 'whatsapp' => $request->numero,
                 'profile' => $pathname,
+                'typeCompte'=>$typecomp,
+                'password'=>$user->password
             ]);
+
+            // $user->delete();
         }
 
         // Mettre à jour l'utilisateur
-        $user->adresse = $request->adresse;
-        $user->longitude = $request->longitude;
-        $user->latitude = $request->latitude;
-        $user->typeCompte = $request->type;
-        $user->numero = $request->numero ?? '';
-        $user->profile = $pathname ?? $user->profile;
-        $user->descriptions = $user->descriptions ?? '';
-        $user->save();
+    $user->update([
+        'adresse' => $request->adresse,
+        'longitude' => $request->longitude,
+        'latitude' => $request->latitude,
+        'typeCompte' => $request->type,
+        'numero' => $request->numero ?? '',
+        'profile' => $request->hasFile('profile') ? $pathname : $user->profile,
+        'descriptions' => $user->descriptions ?? '',
+    ]);
+
+    // $prestataire->update([
+    //     'profile'=>$user->profile
+    // ]);
+
+    $user->delete();
 
         return response()->json([
             'success' => true,
             'message' => 'Profil modifié avec succès',
-            'token' => $user->remember_token
+            'token' => $user->remember_token,
+            'user'=>$prestataire
         ], 200);
     }
 
@@ -260,15 +310,18 @@ public function rating(Request $request)
     $validator = Validator::make($request->all(), [
         'prestatire_id' => 'required|integer',
         'users_id' => 'required',
-        'note' => 'required|integer|min:1|max:5',
+        'note' => 'required',
     ]);
 
     if ($validator->fails()) {
+        Log::info($validator->errors()->first());
         return response()->json(['message' => $validator->errors()->first()], 500);
+
     }
 
     $user = User::where('remember_token', $request->users_id)->first();
-    if (!$user) {
+     $prestataire = Prestataire::find( $request->prestatire_id);
+    if (!$user || !$prestataire) {
         return response()->json(['message' => 'utilisateur non trouvé'], 404);
     }
 
@@ -288,11 +341,13 @@ public function rating(Request $request)
 
     if ($rating) {
         // broadcast
-        //vider le cache 
-        Cache::forget('notifications');
-         Cache::forget('notifications');
-          Cache::forget('notifications'+$request->prestatire_id);
-        event(new RatingEvent(rating: $rating));
+        // //vider le cache 
+        // Cache::forget('notifications');
+        //  Cache::forget('notifications');
+        //   Cache::forget('notifications'.$request->prestatire_id);
+        $prestataire->notify(new PrestataireRatedNotification($rating));
+         event(new RatingEvent($rating));
+
 
 
         
@@ -302,4 +357,49 @@ public function rating(Request $request)
 
     return response()->json(['message' => 'Une erreur est survenue'], 500);
 }
+
+// verifier la veracite de l'utilisateur 
+
+public function verifierClient(Request $request){
+    $validator = Validator::make($request->all(),[
+      'numero'=>'required',
+      'id'=>'required',
+      'token'=>'required'
+    ]);
+
+    if($validator->fails()){
+        Log::info('validation des champs : '.$validator->errors()->all());
+        return response()->json([
+             'valid' => false,
+            'message'=>'une erreur est survenue.'
+
+        ],400);
+    }
+       $prestataire = Prestataire::where('token',$request->token)->first();
+        if(!$prestataire){
+            return response()->json([
+                 'valid' => false,
+                'message'=> 'token invalide'
+            ],404);
+        }
+
+        $user=User::where('id',$request->id)->where('numero',$request->numero)->first();
+            if(!$user){
+            return response()->json([
+                'valid' => false,
+                'message'=> 'utilsateur non trouve(e)'
+            ],404);
+        }
+
+      return response()->json([
+            'valid' => true,
+            'client' => [
+                'id' => $user->id,
+                'email' => $user->email
+            ]
+        ]);
+    
+
+}
+
 }

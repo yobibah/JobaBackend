@@ -6,8 +6,10 @@ use App\Models\horaires;
 use App\Models\Rating;
 use App\Models\User;
 use App\Models\Exploits;
+use Exception;
 use GuzzleHttp\Psr7\Query;
 use App\Models\Prestataire;
+use   \Illuminate\Support\Facades\Storage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Session\Store;
 use Illuminate\Support\Carbon;
@@ -177,18 +179,30 @@ class PrestataireController extends Controller
         // $request->validate([
         //     'token' => 'required'
         // ]);
+        $validator = Validator::make($request->all(),[
+            'token' => 'required'
+        ]);
 
+        if($validator->fails()){
+            Log::info('putin de token '.$validator->errors()->all());
+               return response()->json([
+                'status' => 'error',
+                'message' => "Aucun prestataire disponible pour l'instant."
+            ],400);
+        }
+        $token = $request->token;
         // Récupération de tous les prestataires dans un ordre aléatoire
-        $users = Cache::remember('users', 10, function () {
-            return Prestataire::inRandomOrder()->get();
-        });
+      $users = 
+     Prestataire::where('token', '!=', $token)->get();
 
+  Log::info($users);
 
+           
         if ($users->isEmpty()) {
             return response()->json([
                 'status' => 'error',
                 'message' => "Aucun prestataire disponible pour l'instant."
-            ]);
+            ],404);
         }
 
         // Ajout du rating pour chaque prestataire
@@ -228,13 +242,19 @@ class PrestataireController extends Controller
 
     public function StoreExploit(Request $request)
     {
-        $request->validate([
+        $validator=Validator::make($request->all(),[
             'token' => 'required',
-            'users_id' => 'required',
-            'caption' => 'required|alpha',
-            'image' => 'required|nimes:png,jpg,jpeg,svg,avif',
-            'video' => 'nullable|nimes:mp4,mp3',
+            'user_id' => 'required',
+            'caption' => 'required|string',
+            'image'=>'required'
         ]);
+
+        if($validator->fails()){
+            Log::info($validator->errors()->all());
+            return response()->json([
+                'message'=>'veuillez remplir correctement les champs'
+            ],402);
+        }
 
         $prestataire = Prestataire::where('token', $request->token)->first();
         if ($prestataire) {
@@ -243,28 +263,29 @@ class PrestataireController extends Controller
                 $image = basename($path);
             }
 
-            if (filled('video')) {
-                $path = $request->file('video')->store('exploits', 'public');
-                $video = basename($path);
-            }
 
 
-            Exploits::created([
-                'user_id' => $request->users_id,
+            
+          $exploits=  Exploits::create([
+                'users_id' => $request->user_id,
                 'caption' => $request->caption,
                 'image' => $image,
-                'video' => $video || null,
+                'video' =>  'null',
                 'prestataire_id' => $prestataire->id,
             ]);
+            if(!$exploits){
+            Log::error( $exploits);
+            return response()->json([
+                'message' => 'une erreur est survenue',
+            ],500);
+            }
 
             return response()->json([
                 'message' => 'exploits creer avec succes',
-            ]);
+            ],201);
 
         }
-        return response()->json([
-            'message' => "une erreur est survenue lors de la creation de l'exploit"
-        ], 201);
+       
 
     }
 
@@ -274,18 +295,33 @@ class PrestataireController extends Controller
             "token" => "required",
             "id_exploit" => "required"
         ]);
+        $validator = Validator::make($request->all(),[
+          
+             "token" => "required",
+            "id_exploit" => "required"
+        ]);
+        if($validator->fails()){
+            Log::info($validator->errors()->all());
+            return response()->json([
+                  'message'=>'token ou exploits invalide',
+            ]);
+        }
         $prestataire = Prestataire::where("token", $request->token)->first();
         if ($prestataire) {
             $exploit = Exploits::where("id", $request->id_exploit)
-                ->where("prestataires_id", $prestataire->id)
+                ->where("prestataire_id", $prestataire->id)
                 ->first();
             if ($exploit) {
+                  if ($exploit->image && Storage::disk('public')->exists($exploit->image)) {
+                    Storage::disk('public')->delete($exploit->image);
+                 }
                 $exploit->delete();
                 return response()->json([
                     "message" => "exploit supprimer avec succes ..."
                 ], 200);
             }
         }
+        Log::error($prestataire);
         return response()->json([
             "message" => "une erreur est survenue lors de la supression..."
         ], 400);
@@ -335,7 +371,9 @@ class PrestataireController extends Controller
 
         $prestataire = Prestataire::where('token', $request->token)->first();
         if ($prestataire) {
-            $exploit = Exploits::where('prestataires_id', $prestataire->id)->get();
+            $exploit = Exploits:: with(['users'=>function($q){
+                $q->select('users.id','users.nom','users.prenom','users.adresse');
+            }])->where('prestataire_id', $prestataire->id)->get();
             if ($exploit->isNotEmpty()) {
                 return response()->json([
                     'exploits' => $exploit
@@ -399,10 +437,16 @@ class PrestataireController extends Controller
 
     public function MesHoraires(Request $request)
     {
-        $request->validate([
+        $validator =Validator::make($request->all(),[
             'token' => 'required',
         ]);
 
+           if($validator->fails()){
+            Log::info($validator->errors()->all());
+            return response()->json([
+                'message'=>'erreur de token'
+            ],402);
+        }
         $user = Prestataire::where('token', $request->token)->first();
         if ($user) {
             $horaires = horaires::where('prestataire_id', $user->id);
@@ -488,7 +532,7 @@ class PrestataireController extends Controller
     public function prestataireVedette()
     {
         $prestataires = Cache::remember('prestataire_vedette', 600, function () {
-            return Prestataire::select('nom', 'prenom', 'profile', 'id', 'profession', 'adresse', 'numero', 'rating')->where('boosted', 1)
+            return Prestataire::select('nom', 'prenom', 'profile', 'id', 'profession', 'adresse', 'numero', 'rating','typeCompte')->where('boosted', 1)
                 ->get()
                 ->map(function ($item) {
                     $ratingCount = Rating::where('prestataires_id', $item->id)->count();
@@ -501,7 +545,7 @@ class PrestataireController extends Controller
                     return $item;
                 })
                 ->filter(function ($item) {
-                    return $item->rating !== null && $item->rating > 4;
+                    return $item->rating !== null && $item->rating >= 4;
                 })
                 ->values();
         });
@@ -511,107 +555,70 @@ class PrestataireController extends Controller
             'from' => Cache::has('prestataire_vedette') ? 'cache' : 'database'
         ]);
     }
-
     public function notifi(Request $request)
     {
-        $validate = Validator::make($request->all(), [
-            'token' => 'required'
-        ]);
+        $request->validate(['token' => 'required']);
 
-
-        if ($validate->fails()) {
-            return response()->json([
-                'message' => $validate->errors()->all()
-            ], 402);
-        }
-
-        $prestataire = User::find($request->token);
+        $prestataire = Prestataire::find($request->token);
         if (!$prestataire) {
-            return response()->json([
-                'message' => 'prestataire non trouve'
-            ], 404);
-
+            return response()->json(['message' => 'Prestataire non trouvé'], 404);
         }
 
-        $cachekey = 'notifications1';
+        $unread = DB::table('notifications')
+            ->where('notifiable_id', $prestataire->id)
+            ->whereNull('read_at')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($notif) {
+                $data = json_decode($notif->data, true);
+                return [
+                    'id' => $notif->id,
+                    'note' => $data['note'] ?? null,
+                    'message' => $data['message'] ?? null,
+                    'user' => User::find($data['user_id'] ?? null),
+                    'created_at' => $notif->created_at,
+                ];
+            });
 
-        $notifs = Cache::remember($cachekey, 2, function () use ($prestataire) {
-            return DB::table('notifications')
-                ->where('notifiable_id', $prestataire->id)
-                ->whereNull('read_at')
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function ($notif) {
-
-                    $data = json_decode($notif->data, true);
-
-                    return [
-                        'id' => $notif->id,
-                        'note' => $data['note'] ?? null,
-                        'message' => $data['message'] ?? null,
-                        'user' => User::find($data['user_id'] ?? null),
-                        'created_at' => $notif->created_at,
-                    ];
-                });
-        });
-
-        $cachekey = 'notifications2';
-        $notif2 = Cache::remember($cachekey, 30, function () use ($prestataire) {
-            return DB::table('notifications')
-                ->where('notifiable_id', $prestataire->id)
-                ->whereNotNull('read_at')
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function ($notif) {
-
-                    $data = json_decode($notif->data, true);
-
-                    return [
-                        'id' => $notif->id,
-                        'note' => $data['note'] ?? null,
-                        'message' => $data['message'] ?? null,
-                        'user' => User::find($data['user_id'] ?? null),
-                        'created_at' => $notif->created_at,
-                    ];
-                });
-        });
-
+        $read = DB::table('notifications')
+            ->where('notifiable_id', $prestataire->id)
+            ->whereNotNull('read_at')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($notif) {
+                $data = json_decode($notif->data, true);
+                return [
+                    'id' => $notif->id,
+                    'note' => $data['note'] ?? null,
+                    'message' => $data['message'] ?? null,
+                    'user' => User::find($data['user_id'] ?? null),
+                    'created_at' => $notif->created_at,
+                ];
+            });
 
         return response()->json([
-            'notifications' => $notifs,
-            'lus' => $notif2
+            'notifications' => $unread,
+            'lus' => $read
         ]);
     }
 
-
     public function readNotif(Request $request)
     {
-        $validate = Validator::make($request->all(), [
-            'token' => 'required'
-        ]);
+        $request->validate(['token' => 'required']);
 
-        if ($validate->fails()) {
-            return response()->json([
-                'message' => $validate->errors()->all()
-            ], 402);
-        }
-        $prestataire = User::find($request->token);
+        $prestataire = Prestataire::find($request->token);
         if (!$prestataire) {
-            return response()->json([
-                'message' => 'prestataire non trouvé'
-            ]);
+            return response()->json(['message' => 'Prestataire non trouvé'], 404);
         }
 
         DB::table('notifications')
             ->where('notifiable_id', $prestataire->id)
             ->whereNull('read_at')
-            ->update([
-                'read_at' => now()
-            ]);
+            ->update(['read_at' => now()]);
 
-        return response()->json([
-            'message' => 'Toutes les notifications ont été lues'
-        ]);
+        Cache::forget('notifications' . $prestataire->id);
+
+        return response()->json(['message' => 'Toutes les notifications ont été lues']);
     }
 
 
@@ -627,29 +634,112 @@ class PrestataireController extends Controller
                 'message' => $validate->errors()->all()
             ], 402);
         }
-        $prestataire = User::find($request->token);
+        $prestataire = Prestataire::find($request->token);
         if (!$prestataire) {
             return response()->json([
                 'message' => 'prestataire non trouvé'
             ]);
         }
-        $cachekey = 'notifications' . $prestataire->id;
+        // $cachekey = 'notifications' . $prestataire->id;
 
-        $notifs = Cache::remember($cachekey, 300, function () use ($prestataire) {
-            return DB::table('notifications')
+        $notifs = 
+             DB::table('notifications')
                 ->where('notifiable_id', $prestataire->id)
                 ->whereNull('read_at')
                 ->count();
-        });
-
-        Log::info(Cache::get('notifications16').'cacher');
-        Log::info($notifs.'notifs');
+       
+        Log::info(Cache::get('notifications16') . 'cacher');
+        Log::info($notifs . 'notifs');
 
         return response()->json([
             'notifications' => $notifs
         ]);
 
     }
+
+
+    public function PersonneQuiMaNoter(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'tokens' => 'required',
+            'user_id' => 'required|exists:users,id'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'une erreur est survenue.'
+
+            ], 422);
+        }
+
+        try {
+            $prestataire = Prestataire::where('token', $request->tokens)->first();
+
+        
+            if (!$prestataire) {
+                return response()->json([
+                    'message' => 'prestataire non trouver :).'
+                ], 404);
+
+            }
+
+            $user_id=$request->user_id;
+
+         $user =  DB::table('notifications')
+            ->where('notifiable_id', $prestataire->id)
+            ->get()
+            ->first(function ($notif) use ($user_id) {
+                $data = json_decode($notif->data, true);
+                return isset($data['user_id']) && $data['user_id'] == $user_id;
+            });
+
+
+        // retourner les details de l'utilsateur
+
+        $utilis = User::find($user_id);
+    
+        
+        if(!$user){
+            return response()->json([
+                'message'=>"cet utilisateur n'a pas note le prestataire"
+            ],404);
+        }
+        if($utilis){
+            $utilis->email = Str::mask($utilis->email,"*",2,5);
+        }
+
+        return response()->json([
+            'users'=>$utilis
+        ],200);
+
+        }
+
+        catch(Exception $e){
+            Log::info('personne qui ma noter son catch'.$e->getMessage());
+        }
+        
+    }
+
+
+public function like($q)
+{
+    try {
+        $prestataires = Cache::remember('prestataire_',30,function () use($q){
+              return  Prestataire::where('prestataire', 'like', "%{$q}%")->get();
+        });
+      
+
+        return response()->json([
+            'status' => true,
+            'data' => $prestataires
+        ]);
+    } catch (Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Erreur : ' . $e->getMessage()
+        ], 500);
+    }
+}
 
 
 }
